@@ -1,0 +1,65 @@
+version: "3.8"
+networks:
+  mojaloop-net:
+    name: mojaloop-net
+
+
+services:
+  mojaloop-connector:
+    image: stoplight/prism:4
+    command: mock -h 0.0.0.0 "/tmp/api.oas2.yml"
+    volumes:
+      - ./resources/api-spec:/tmp
+    ports:
+      - "4010:4010"
+    init: true
+    container_name: mojaloop-connector
+    restart: unless-stopped
+    networks:
+      - mojaloop-net
+
+  core-connector: 
+    build:
+      context: ./src/
+    image: mojaloop/airtel-core-connector # edit this line
+    networks:
+      - mojaloop-net
+    env_file: .env.example
+    ports:
+      - "3003:3003" 
+      - "3004:3004" 
+
+  TtkBackend:
+    networks:
+      - mojaloop-net
+    ## TODO: Change the following version to standard version
+    image: mojaloop/ml-testing-toolkit:v15.6.3
+    # image: mojaloop/ml-testing-toolkit:v16.1.0-snapshot.3
+    user: root
+    volumes:
+      - "./config/ttksim/spec_files:/opt/app/spec_files"
+      - "./config/ttksim/environments:/opt/app/examples/environments"
+    ports:
+      - "4040:4040"
+      - "5050:5050"
+    environment:
+      - AUTH_ENABLED=FALSE
+    command: npm start
+    healthcheck:
+      test: ["CMD-SHELL", "nc localhost 4040"]
+      interval: 5s
+      timeout: 10s
+      retries: 3
+
+  TtkUi:
+    image: mojaloop/ml-testing-toolkit-ui:v15.3.0
+    ports:
+      - "6060:6060"
+    networks:
+      - mojaloop-net
+    environment:
+      - API_BASE_URL=http://localhost:5050
+      - AUTH_ENABLED=FALSE
+    command:
+      - sh
+      - /usr/share/nginx/start.sh
